@@ -1,7 +1,7 @@
 import os
 
 # Paths
-DATA_DIR = os.path.join('..', 'data/DEV')
+DATA_DIR = os.path.join('..', 'data/')
 PARTIAL_INDEX_DIR = os.path.join('..', 'partial_indexes')
 FINAL_INDEX_DIR = os.path.join('..', 'final_index')
 DOC_MAPPING_FILE = os.path.join('..', 'doc_mapping.json')
