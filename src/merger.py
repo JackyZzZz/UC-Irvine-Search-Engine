@@ -32,9 +32,11 @@ def merge_partial_indexes():
                 print(f"Error processing {p_file}: {e}")
 
         print("\nSorting final index entries...")
+        # Sort the tokens
+        final_index = dict(sorted(final_index.items()))
         # Sort postings for each token by Frequency
         for token in final_index:
-            final_index[token].sort(key=lambda x: x[1])
+            final_index[token].sort(key=lambda x: x[1], reverse=True)
 
         # Save final inverted index
         final_index_path = os.path.join(FINAL_INDEX_DIR, 'final_inverted_index.json')
