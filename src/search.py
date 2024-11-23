@@ -7,35 +7,50 @@ from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE
 def search_with_query(limit, *args):
     stemer = PorterStemmer()
 
-    # Load the inverted_index
+    # Load the inverted_index and doc mapping
     with open(f"{FINAL_INDEX_DIR}/final_inverted_index.json") as file:
         data = json.load(file)
-    
-    # Load the doc mapping file
     with open(DOC_MAPPING_FILE) as file:
         map = json.load(file)
 
-    # Stem the query terms first
+    # Stem the query terms
     stemmed_terms = [stemer.stem(term) for term in args]
-
-    doc_set = set()
-
-    # Get the index set
+    
+    # Get document sets for each term
+    term_docs = []
     for term in stemmed_terms:
-        indexes = data.get(term, "Not Found")
-        if indexes != "Not Found":
-            count = 1
-            for index in indexes:
-                if count > limit:
-                    break
-                doc_set.add(index[0])
-                count += 1
-    
-    # Print out the links
-    for doc_id in doc_set:
-        print(map[f'{doc_id}'])
+        if term in data:
+            docs = set(posting[0] for posting in data[term])
+            term_docs.append(docs)
+        else:
+            return
 
-    
+    # Intersect all document sets
+    if term_docs:
+        result_set = term_docs[0]
+        for docs in term_docs[1:]:
+            result_set = result_set.intersection(docs)
+
+        # Calculate scores and deduplicate by base URL
+        url_scores = {}  # Dict to store highest score for each base URL
+        for doc_id in result_set:
+            url = map[str(doc_id)]
+            # Remove fragment from URL (everything after #)
+            base_url = url.split('#')[0]
+            
+            # Calculate total frequency for this document
+            total_freq = sum(posting[1] for term in stemmed_terms 
+                           for posting in data[term] 
+                           if posting[0] == doc_id)
+            
+            # Keep only highest scoring version of each URL
+            if base_url not in url_scores or total_freq > url_scores[base_url][1]:
+                url_scores[base_url] = (doc_id, total_freq)
+
+        # Sort by frequency and output top k unique results
+        results = sorted(url_scores.values(), key=lambda x: x[1], reverse=True)
+        for doc_id, _ in results[:limit]:
+            print(map[str(doc_id)])
 
 
 if __name__ == "__main__":
