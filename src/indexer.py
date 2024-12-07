@@ -52,6 +52,7 @@ def build_partial_indexes():
                                     print(f"Processed {total_docs} documents...")
 
                             if (doc_id - 1) % BATCH_SIZE == 0:
+                                inverted_index = dict(sorted(inverted_index.items()))
                                 print(f"\nSaving partial index {partial_count} ({len(inverted_index)} terms)...")
                                 partial_path = os.path.join(PARTIAL_INDEX_DIR, f'partial_{partial_count}.json')
                                 save_json(inverted_index, partial_path)
@@ -67,6 +68,7 @@ def build_partial_indexes():
 
         # Save any remaining documents
         if inverted_index:
+            inverted_index = dict(sorted(inverted_index.items()))
             print(f"\nSaving final partial index {partial_count}...")
             partial_path = os.path.join(PARTIAL_INDEX_DIR, f'partial_{partial_count}.json')
             save_json(inverted_index, partial_path)
