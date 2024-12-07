@@ -6,6 +6,7 @@ from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE
 
 def search_with_query(limit, *args):
     stemer = PorterStemmer()
+    results = []
 
     # Load the inverted_index and doc mapping
     with open(f"{FINAL_INDEX_DIR}/final_inverted_index.json") as file:
@@ -23,7 +24,7 @@ def search_with_query(limit, *args):
             docs = set(posting[0] for posting in data[term])
             term_docs.append(docs)
         else:
-            return
+            return []
 
     # Intersect all document sets
     if term_docs:
@@ -48,10 +49,16 @@ def search_with_query(limit, *args):
                 url_scores[base_url] = (doc_id, total_freq)
 
         # Sort by frequency and output top k unique results
-        results = sorted(url_scores.values(), key=lambda x: x[1], reverse=True)
-        for doc_id, _ in results[:limit]:
+        sorted_results = sorted(url_scores.values(), key=lambda x: x[1], reverse=True)
+        for doc_id, _ in sorted_results[:limit]:
             print(map[str(doc_id)])
-
+            url = map[str(doc_id)]
+            results.append({
+                'url': url,
+                'title': url.split('/')[-1] or url  # Use last part of URL as title, or full URL if empty
+            })
+    
+    return results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Search with query using an inverted index.")
