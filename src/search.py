@@ -72,7 +72,7 @@ def search_with_query(limit, *args):
         #         url_scores[base_url] = (doc_id, total_freq)
 
         # Sort by frequency and output top k unique results
-        sorted_results = sorted(url_scores.values(), key=lambda x: x[1], reverse=True)
+        sorted_results = sorted(doc_scores.values(), key=lambda x: x[1], reverse=True)
         for doc_id, _ in sorted_results[:limit]:
             print(map[str(doc_id)])
             url = map[str(doc_id)]
