@@ -5,6 +5,27 @@ from collections import defaultdict
 from tokenizer import Tokenizer
 from utils import setup_logging, save_json
 from config import DATA_DIR, PARTIAL_INDEX_DIR, DOC_MAPPING_FILE, LOG_FILE, BATCH_SIZE, LINKS_FILE
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+
+def extract_outbound_links(content, base_url):
+    """
+    Extracts outbound links from HTML content.
+
+    :param content: HTML content as a string.
+    :param base_url: The base URL of the document for resolving relative URLs.
+    :return: A list of absolute outbound URLs.
+    """
+    soup = BeautifulSoup(content, 'html.parser')
+    outbound_links = []
+
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        # Resolve relative URLs to absolute URLs
+        full_link = urljoin(base_url, href)
+        outbound_links.append(full_link)
+
+    return outbound_links
 
 def build_partial_indexes():
     setup_logging(LOG_FILE)
@@ -37,8 +58,8 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
-                                outbound_links = data.get('links', [])  # assumed field
-                                
+                                # outbound_links = data.get('links', [])  # Remove this line
+
                                 doc_mapping[doc_id] = url
                                 
                                 # Tokenize and record positions
@@ -53,7 +74,8 @@ def build_partial_indexes():
                                     freq = len(positions)
                                     inverted_index[token].append([doc_id, freq, positions])
                                 
-                                # Record outbound links by URL for this doc_id
+                                # Extract outbound links from HTML content
+                                outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
                                     links_temp[doc_id].extend(outbound_links)
 

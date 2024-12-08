@@ -121,9 +121,6 @@ def merge_partial_indexes():
             with open(os.path.join(FINAL_INDEX_DIR, fname), 'r') as ff:
                 final_indexes[key] = json.load(ff)
 
-        # Handle others
-        with open(other_file, 'r') as of:
-            others_index = json.load(of)
 
         # Distribute tokens
         for token, postings in final_data.items():
@@ -146,11 +143,6 @@ def merge_partial_indexes():
             save_json(sorted_index, path)
             print(f"Saved {path}")
 
-        # Save others
-        others_path = os.path.join(FINAL_INDEX_DIR, 'other_tokens.json')
-        sorted_others = dict(sorted(others_index.items()))
-        save_json(sorted_others, others_path)
-        print(f"Saved {others_path}")
 
         # Compute IDF
         print("Computing IDF values...")
