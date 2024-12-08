@@ -10,26 +10,29 @@ from urllib.parse import urljoin, urlparse
 
 def extract_outbound_links(content, base_url):
     """
-    Extracts outbound links from HTML content.
-
-    :param content: HTML content as a string.
-    :param base_url: The base URL of the document for resolving relative URLs.
-    :return: A list of absolute outbound URLs.
+    Extracts outbound links from HTML content, removing URLs with fragments
+    and deduplicating the final list.
     """
     soup = BeautifulSoup(content, 'html.parser')
-    outbound_links = []
+    outbound_links = set()
 
     for a_tag in soup.find_all('a', href=True):
         href = a_tag['href']
         full_link = urljoin(base_url, href)
-        outbound_links.append(full_link)
+        
+        parsed_link = urlparse(full_link)
+        if parsed_link.fragment:
+            # Skip links with fragments
+            continue
 
-    return outbound_links
+        outbound_links.add(full_link)
+
+    return list(outbound_links)
 
 def build_partial_indexes():
     setup_logging(LOG_FILE)
     tokenizer = Tokenizer()
-    inverted_index = defaultdict(list)  # token -> list of [doc_id, freq, positions]
+    inverted_index = defaultdict(list)  # token -> list of [doc_id, weight, [positions]]
     doc_mapping = {}
     doc_id = 1
     partial_count = 1
@@ -65,18 +68,19 @@ def build_partial_indexes():
 
                                 doc_mapping[doc_id] = url
 
-                                # Tokenize with weights
-                                weighted_tokens = tokenizer.tokenize_with_weights(content)
+                                # Tokenize with weights and positions
+                                weighted_tokens = tokenizer.tokenize_with_positions_and_weights(content)
 
-                                # weighted_tokens: token -> weighted_frequency
-                                for token, wfreq in weighted_tokens.items():
-                                    # Store freq (wfreq) and empty list for positions
-                                    inverted_index[token].append([doc_id, wfreq, []])
+                                # weighted_tokens: token -> (total_weight, [positions])
+                                for token, (wfreq, positions) in weighted_tokens.items():
+                                    inverted_index[token].append([doc_id, wfreq, positions])
 
-                                # Extract outbound links
+                                # Extract outbound links (fragments handled in extract_outbound_links)
                                 outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
+                                    # Extend and deduplicate
                                     links_temp[doc_id].extend(outbound_links)
+                                    links_temp[doc_id] = list(set(links_temp[doc_id]))
 
                                 doc_id += 1
                                 domain_docs += 1
@@ -117,21 +121,14 @@ def build_partial_indexes():
         url_to_doc_id = {v: k for k, v in doc_mapping.items()}
         links_graph = {}
         for source_doc_id, url_list in links_temp.items():
-            outbound_doc_ids = []
+            outbound_doc_ids = set()
             for u in url_list:
-                # Normalize and also skip if fragment is present in outbound links (optional)
                 parsed_out = urlparse(u)
                 if parsed_out.fragment:
-                    # If you prefer, you can remove the fragment to treat it as the same page:
-                    # no_fragment_url = urlunparse(parsed_out._replace(fragment=''))
-                    # if no_fragment_url in url_to_doc_id:
-                    #     outbound_doc_ids.append(url_to_doc_id[no_fragment_url])
-                    # else:
-                    #     continue
-                    continue  # Just skip link with fragment
+                    continue
                 if u in url_to_doc_id:
-                    outbound_doc_ids.append(url_to_doc_id[u])
-            links_graph[source_doc_id] = outbound_doc_ids
+                    outbound_doc_ids.add(url_to_doc_id[u])
+            links_graph[source_doc_id] = list(outbound_doc_ids)
 
         print(f"\nSaving links graph to {LINKS_FILE}...")
         save_json(links_graph, LINKS_FILE)
@@ -139,6 +136,7 @@ def build_partial_indexes():
     except Exception as e:
         print(f"Critical error: {e}")
         logging.critical(f"Critical error: {e}")
+
 
 if __name__ == "__main__":
     build_partial_indexes()
