@@ -6,7 +6,7 @@ from tokenizer import Tokenizer
 from utils import setup_logging, save_json
 from config import DATA_DIR, PARTIAL_INDEX_DIR, DOC_MAPPING_FILE, LOG_FILE, BATCH_SIZE, LINKS_FILE
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 def extract_outbound_links(content, base_url):
     """
@@ -21,7 +21,6 @@ def extract_outbound_links(content, base_url):
 
     for a_tag in soup.find_all('a', href=True):
         href = a_tag['href']
-        # Resolve relative URLs to absolute URLs
         full_link = urljoin(base_url, href)
         outbound_links.append(full_link)
 
@@ -58,23 +57,23 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
-                                # outbound_links = data.get('links', [])  # Remove this line
+
+                                # Skip URLs with fragments
+                                parsed_url = urlparse(url)
+                                if parsed_url.fragment:
+                                    continue
 
                                 doc_mapping[doc_id] = url
-                                
-                                # Tokenize and record positions
-                                tokens = tokenizer.tokenize_and_stem(content)
-                                term_positions = defaultdict(list)
-                                for pos, token in enumerate(tokens):
-                                    term_positions[token].append(pos)
-                                
-                                # Convert positions to [doc_id, freq, positions]
-                                # freq = len(positions)
-                                for token, positions in term_positions.items():
-                                    freq = len(positions)
-                                    inverted_index[token].append([doc_id, freq, positions])
-                                
-                                # Extract outbound links from HTML content
+
+                                # Tokenize with weights
+                                weighted_tokens = tokenizer.tokenize_with_weights(content)
+
+                                # weighted_tokens: token -> weighted_frequency
+                                for token, wfreq in weighted_tokens.items():
+                                    # Store freq (wfreq) and empty list for positions
+                                    inverted_index[token].append([doc_id, wfreq, []])
+
+                                # Extract outbound links
                                 outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
                                     links_temp[doc_id].extend(outbound_links)
@@ -83,12 +82,11 @@ def build_partial_indexes():
                                 domain_docs += 1
                                 total_docs += 1
 
-                                if total_docs % 100 == 0:  # Progress update every 100 documents
+                                if total_docs % 100 == 0:
                                     print(f"Processed {total_docs} documents...")
 
                             # Save partial indexes if batch size reached
                             if (doc_id - 1) % BATCH_SIZE == 0:
-                                # Sort tokens for consistency
                                 inverted_index = dict(sorted(inverted_index.items()))
                                 print(f"\nSaving partial index {partial_count} ({len(inverted_index)} terms)...")
                                 partial_path = os.path.join(PARTIAL_INDEX_DIR, f'partial_{partial_count}.json')
@@ -112,24 +110,31 @@ def build_partial_indexes():
             print(f"Saved {partial_path}")
 
         # Save document mapping
-        print("\nSaving document mapping...")
         save_json(doc_mapping, DOC_MAPPING_FILE)
         print(f"Indexing complete! Processed {total_docs} documents in total")
 
-        # Now resolve URLs in links_temp to doc_ids using doc_mapping
+        # Resolve URLs in links_temp to doc_ids
         url_to_doc_id = {v: k for k, v in doc_mapping.items()}
         links_graph = {}
         for source_doc_id, url_list in links_temp.items():
             outbound_doc_ids = []
             for u in url_list:
+                # Normalize and also skip if fragment is present in outbound links (optional)
+                parsed_out = urlparse(u)
+                if parsed_out.fragment:
+                    # If you prefer, you can remove the fragment to treat it as the same page:
+                    # no_fragment_url = urlunparse(parsed_out._replace(fragment=''))
+                    # if no_fragment_url in url_to_doc_id:
+                    #     outbound_doc_ids.append(url_to_doc_id[no_fragment_url])
+                    # else:
+                    #     continue
+                    continue  # Just skip link with fragment
                 if u in url_to_doc_id:
                     outbound_doc_ids.append(url_to_doc_id[u])
             links_graph[source_doc_id] = outbound_doc_ids
 
-        # Save the links graph
         print(f"\nSaving links graph to {LINKS_FILE}...")
         save_json(links_graph, LINKS_FILE)
-        print(f"Saved links graph to {LINKS_FILE}")
 
     except Exception as e:
         print(f"Critical error: {e}")

@@ -111,13 +111,9 @@ def merge_partial_indexes():
             tokens_by_letter = defaultdict(list)
             for token, postings in partial_index.items():
                 first_char = token[0].lower()
-                if first_char.isalnum():
-                    tokens_by_letter[first_char].append((token, postings))
-                    df_map[token] += len(postings)
-                else:
-                    # Skip non-alphanumeric tokens
-                    logging.warning(f"Skipping non-alphanumeric token: {token}")
-                    continue
+                tokens_by_letter[first_char].append((token, postings))
+                df_map[token] += len(postings)
+
 
             # For each group, update the corresponding final index file
             for letter, tokens in tokens_by_letter.items():
@@ -136,33 +132,25 @@ def merge_partial_indexes():
                     else:
                         final_index[token] = postings
 
-                # Save the updated final index file
-                try:
-                    # Sort tokens alphabetically for consistency
-                    sorted_final_index = dict(sorted(final_index.items()))
-                    save_json(sorted_final_index, final_index_file)
-                    print(f"Updated {final_index_file} with tokens starting with '{letter}'")
-                except Exception as e:
-                    logging.error(f"Error saving final index file {final_index_file}: {e}")
-                    print(f"Error saving final index file {final_index_file}: {e}")
-                    continue
+                # Sort tokens alphabetically for consistency
+                sorted_final_index = dict(sorted(final_index.items()))
+                save_json(sorted_final_index, final_index_file)
+                print(f"Updated {final_index_file} with tokens starting with '{letter}'")
+
 
             logging.info(f"Merged {p_file} successfully.")
             print(f"Successfully merged {p_file}")
 
-        print("All partial indexes merged successfully.")
 
         # Save the updated DF map using DF_FILE
         save_json(df_map, DF_FILE)
         print(f"DF values saved to {DF_FILE}")
 
         # Compute IDF
-        print("Computing IDF values...")
         idf = compute_idf(df_map, total_docs, IDF_FILE)
         print(f"IDF values computed and saved to {IDF_FILE}")
 
         # Compute TF-IDF for each final index file
-        print("Computing TF-IDF scores for final index files...")
         for final_file in [f for f in os.listdir(FINAL_INDEX_DIR) if f.endswith('_tokens.json')]:
             final_path = os.path.join(FINAL_INDEX_DIR, final_file)
             try:
