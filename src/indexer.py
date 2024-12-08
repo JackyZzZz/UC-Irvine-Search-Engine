@@ -4,16 +4,19 @@ import logging
 from collections import defaultdict
 from tokenizer import Tokenizer
 from utils import setup_logging, save_json
-from config import DATA_DIR, PARTIAL_INDEX_DIR, DOC_MAPPING_FILE, LOG_FILE, BATCH_SIZE
+from config import DATA_DIR, PARTIAL_INDEX_DIR, DOC_MAPPING_FILE, LOG_FILE, BATCH_SIZE, LINKS_FILE
 
 def build_partial_indexes():
     setup_logging(LOG_FILE)
     tokenizer = Tokenizer()
-    inverted_index = defaultdict(list)
+    inverted_index = defaultdict(list)  # token -> list of [doc_id, freq, positions]
     doc_mapping = {}
     doc_id = 1
     partial_count = 1
     total_docs = 0
+
+    # Temporary storage for links in the form doc_id -> list_of_urls
+    links_temp = defaultdict(list)
 
     print("Starting indexing process...")
     try:
@@ -34,16 +37,26 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
+                                outbound_links = data.get('links', [])  # assumed field
+                                
                                 doc_mapping[doc_id] = url
+                                
+                                # Tokenize and record positions
                                 tokens = tokenizer.tokenize_and_stem(content)
+                                term_positions = defaultdict(list)
+                                for pos, token in enumerate(tokens):
+                                    term_positions[token].append(pos)
                                 
-                                # Process document
-                                term_freq = defaultdict(int)
-                                for token in tokens:
-                                    term_freq[token] += 1
-                                for token, freq in term_freq.items():
-                                    inverted_index[token].append([doc_id, freq])
+                                # Convert positions to [doc_id, freq, positions]
+                                # freq = len(positions)
+                                for token, positions in term_positions.items():
+                                    freq = len(positions)
+                                    inverted_index[token].append([doc_id, freq, positions])
                                 
+                                # Record outbound links by URL for this doc_id
+                                if outbound_links:
+                                    links_temp[doc_id].extend(outbound_links)
+
                                 doc_id += 1
                                 domain_docs += 1
                                 total_docs += 1
@@ -51,7 +64,9 @@ def build_partial_indexes():
                                 if total_docs % 100 == 0:  # Progress update every 100 documents
                                     print(f"Processed {total_docs} documents...")
 
+                            # Save partial indexes if batch size reached
                             if (doc_id - 1) % BATCH_SIZE == 0:
+                                # Sort tokens for consistency
                                 inverted_index = dict(sorted(inverted_index.items()))
                                 print(f"\nSaving partial index {partial_count} ({len(inverted_index)} terms)...")
                                 partial_path = os.path.join(PARTIAL_INDEX_DIR, f'partial_{partial_count}.json')
@@ -78,6 +93,21 @@ def build_partial_indexes():
         print("\nSaving document mapping...")
         save_json(doc_mapping, DOC_MAPPING_FILE)
         print(f"Indexing complete! Processed {total_docs} documents in total")
+
+        # Now resolve URLs in links_temp to doc_ids using doc_mapping
+        url_to_doc_id = {v: k for k, v in doc_mapping.items()}
+        links_graph = {}
+        for source_doc_id, url_list in links_temp.items():
+            outbound_doc_ids = []
+            for u in url_list:
+                if u in url_to_doc_id:
+                    outbound_doc_ids.append(url_to_doc_id[u])
+            links_graph[source_doc_id] = outbound_doc_ids
+
+        # Save the links graph
+        print(f"\nSaving links graph to {LINKS_FILE}...")
+        save_json(links_graph, LINKS_FILE)
+        print(f"Saved links graph to {LINKS_FILE}")
 
     except Exception as e:
         print(f"Critical error: {e}")
