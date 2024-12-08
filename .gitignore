@@ -5,3 +5,6 @@ partial_indexes
 HW3_M1.zip
 doc_mapping.json
 indexer.log
+links.json
+df.json
+idf.json
