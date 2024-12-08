@@ -83,12 +83,6 @@ def merge_partial_indexes():
             json.dump(example_data, json_file)
     print("10 JSON files created from 0_tokens.json to 9_tokens.json.")
 
-    # For non-alphanumeric starting tokens
-    other_file = os.path.join(FINAL_INDEX_DIR, 'other_tokens.json')
-    with open(other_file, 'w') as of:
-        json.dump(example_data, of)
-    print("Created other_tokens.json for non-alphanumeric starting tokens.")
-
     # Merge partial indexes
     try:
         # Load all final indexes in memory for efficient merging
