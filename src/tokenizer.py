@@ -4,36 +4,36 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 
 class Tokenizer:
-    def __init__(self):
+    def __init__(self, stop_words=None):
         self.ps = PorterStemmer()
         
-        self.title_weight = 3.0
-        self.h1_weight = 2.5
-        self.h2_weight = 2.0
+        self.title_weight = 2.0
+        self.h1_weight = 2.0
+        self.h2_weight = 1.5
         self.h3_weight = 1.5
         self.bold_weight = 1.5
         self.main_weight = 1.0
+        
+        # You can provide a predefined set of stop words or load them from a file
+        self.stop_words = stop_words if stop_words else set()
 
     def tokenize_and_filter(self, text):
-        # Extract alphanumeric tokens and lowercase them
         tokens = re.findall(r'\b[a-zA-Z0-9]+\b', text.lower())
-        # Stem each token
         tokens = [self.ps.stem(tok) for tok in tokens]
         return tokens
 
     def tokenize_with_positions_and_weights(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
-
+        
         # Remove unwanted tags
         for tag in soup(['script', 'style', 'footer', 'nav', 'meta', 'link']):
             tag.decompose()
-        
+
         title_text = ' '.join(t.get_text() for t in soup.find_all('title'))
         h1_text = ' '.join(t.get_text() for t in soup.find_all('h1'))
         h2_text = ' '.join(t.get_text() for t in soup.find_all('h2'))
         h3_text = ' '.join(t.get_text() for t in soup.find_all('h3'))
         bold_text = ' '.join(t.get_text() for t in soup.find_all(['b', 'strong']))
-
         main_text = soup.get_text()
 
         # Tokenize each section
@@ -50,25 +50,38 @@ class Tokenizer:
         h3_set = set(h3_tokens)
         bold_set = set(bold_tokens)
 
-        # We'll accumulate token info in a dict: token -> {weight: float, positions: [int]}
         token_data = defaultdict(lambda: {"weight":0.0, "positions":[]})
 
         for i, t in enumerate(main_tokens):
-            occurrence_weight = self.main_weight
-            if t in bold_set:
-                occurrence_weight += self.bold_weight
-            if t in h3_set:
-                occurrence_weight += self.h3_weight
-            if t in h2_set:
-                occurrence_weight += self.h2_weight
-            if t in h1_set:
-                occurrence_weight += self.h1_weight
-            if t in title_set:
-                occurrence_weight += self.title_weight
+            # Skip stop words entirely or give them no extra weight
+            if t in self.stop_words:
+                # If you want to still index them but with no extra weight, just continue.
+                # If you don't want to index them at all, skip this token:
+                # continue
+                occurrence_weight = self.main_weight
+            else:
+                # Determine the best possible weight addition
+                candidate_weights = []
+                if t in title_set:
+                    candidate_weights.append(self.title_weight)
+                if t in h1_set:
+                    candidate_weights.append(self.h1_weight)
+                if t in h2_set:
+                    candidate_weights.append(self.h2_weight)
+                if t in h3_set:
+                    candidate_weights.append(self.h3_weight)
+                if t in bold_set:
+                    candidate_weights.append(self.bold_weight)
+
+                # If the token appears in special sets, choose the highest weight
+                # Otherwise, it just has the main_weight
+                if candidate_weights:
+                    occurrence_weight = self.main_weight + max(candidate_weights)
+                else:
+                    occurrence_weight = self.main_weight
 
             token_data[t]["weight"] += occurrence_weight
             token_data[t]["positions"].append(i)
 
-        # Convert to the desired format: {token: (total_weight, [positions])}
         result = {tok: (d["weight"], d["positions"]) for tok, d in token_data.items()}
         return result
