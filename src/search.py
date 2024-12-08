@@ -1,51 +1,72 @@
 import json
-import argparse
 from nltk.stem import PorterStemmer
 from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE, TOKEN_RETRIEVAL_OFFSET_FILE
+from parse_file import load_token_data
+import time
 
-def search_with_query(limit, *args):
+doc_map = None
+stemer = None
+token_retrieval_offset_map = None
+
+def pre_loading_files():
+    global doc_map, stemer, token_retrieval_offset_map
+
+    # stemer for query stemming
     stemer = PorterStemmer()
-    results = []
-
+    
     # Load doc_id -> url mapping
-    with open(DOC_MAPPING_FILE) as file:
+    with open(DOC_MAPPING_FILE, 'r') as file:
         doc_map = json.load(file)
 
+    with open(TOKEN_RETRIEVAL_OFFSET_FILE, 'r') as file:
+        token_retrieval_offset_map = json.load(file)
+
+def search_with_query(query, limit = 1000):
+    start_time = time.time()
+
+    global stemer, doc_map, token_retrieval_offset_map
+
+    results = []
+
     # Stem the query terms
-    stemmed_terms = [stemer.stem(term) for term in args]
+    stemmed_terms = sorted([stemer.stem(term) for term in query.strip().split()])
 
     docs_scores_map = {}
     # We'll store positions as well: docs_positions_map = { doc_id: {term: [positions]} }
     docs_positions_map = {}
 
     previous_letter = None
-    data = {}
+    file = None
 
     # Load postings for each term, sum TF-IDF scores, and collect positions
     for term in stemmed_terms:
+
+        if not term in token_retrieval_offset_map:
+            continue
+        
         starting_letter = term.lower()[0]
-        # If we haven't loaded the index file for this character yet, do so now
+
         if starting_letter != previous_letter:
-            with open(f"{FINAL_INDEX_DIR}/{starting_letter}_tokens.json") as file:
-                data = json.load(file)
+            if file:
+                file.close()
+            file = open(f"{FINAL_INDEX_DIR}/{starting_letter}_tokens.txt", 'r')
             previous_letter = starting_letter
 
-        if term in data:
-            for posting in data[term]:
-                doc_id = posting[0]
-                tfidf_score = posting[1]
-                positions = posting[2]
+        for posting in load_token_data(file, token_retrieval_offset_map[term]):
+            doc_id = posting[0]
+            tfidf_score = posting[1]
+            positions = posting[2]
 
-                # Sum TF-IDF
-                if doc_id in docs_scores_map:
-                    docs_scores_map[doc_id] += tfidf_score
-                else:
-                    docs_scores_map[doc_id] = tfidf_score
+            # Sum TF-IDF
+            if doc_id in docs_scores_map:
+                docs_scores_map[doc_id] += tfidf_score
+            else:
+                docs_scores_map[doc_id] = tfidf_score
 
-                # Store positions for each term in docs_positions_map
-                if doc_id not in docs_positions_map:
-                    docs_positions_map[doc_id] = {}
-                docs_positions_map[doc_id][term] = positions
+            # Store positions for each term in docs_positions_map
+            if doc_id not in docs_positions_map:
+                docs_positions_map[doc_id] = {}
+            docs_positions_map[doc_id][term] = positions
 
     # If there are multiple terms, we’ll consider proximity
     if len(stemmed_terms) > 1:
@@ -111,22 +132,17 @@ def search_with_query(limit, *args):
                 'url': url,
                 'title': url.split('/')[-1] or url
             })
+    
+    end_time = time.time()
+
+    print(f'\nThis search causes {end_time - start_time} seconds\n')
 
     return results
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Search with query using an inverted index and positional index.")
-    parser.add_argument(
-        "terms",
-        nargs="+",
-        help="The query terms to search for in the inverted index.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=5,
-        help="The limit for the number of results (default: 5).",
-    )
+    
+    pre_loading_files()
 
-    args = parser.parse_args()
-    search_with_query(args.limit, *args.terms)
+    while True:
+        query = input("Please enter your query here:")
+        search_with_query(query)

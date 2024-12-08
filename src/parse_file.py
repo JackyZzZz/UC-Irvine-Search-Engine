@@ -38,21 +38,20 @@ def track_token_retreival_offset(text_file, token_retrieval_offset_map):
     if not token:
         token_retrieval_offset_map[token] = [position, posting_len]
 
-def load_token_data(text_file, location_info):
-    with open(text_file, 'r') as file:
-        file.seek(location_info[0])
-        length = location_info[1]
-        data_fetched = []
-        count = 0
-        while count < length:
-            count += 1
-            line = file.readline()
-            print(line)
-            parts = line.split(",")
-            id = int(parts[0])
-            score = float(parts[1])
-            numbers = list(map(int, parts[2].strip().split()))
-            data_fetched.append([id, score, numbers])
+def load_token_data(file, location_info):
+    file.seek(location_info[0])
+    length = location_info[1]
+    data_fetched = []
+    count = 0
+    while count < length:
+        count += 1
+        line = file.readline()
+        parts = line.split(",")
+        id = int(parts[0])
+        score = float(parts[1])
+        numbers = list(map(int, parts[2].strip().split()))
+        data_fetched.append([id, score, numbers])
+    file.seek(0)
     return data_fetched
 
 def processing_final_tokens():
