@@ -4,7 +4,14 @@ import logging
 import math
 from collections import defaultdict
 from utils import setup_logging, save_json, load_json
-from config import PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, LOG_FILE, DOC_MAPPING_FILE, IDF_FILE
+from config import (
+    PARTIAL_INDEX_DIR, 
+    FINAL_INDEX_DIR, 
+    LOG_FILE, 
+    DOC_MAPPING_FILE, 
+    IDF_FILE, 
+    DF_FILE  
+)
 
 def compute_idf(df_map, total_docs, idf_file):
     """
@@ -65,13 +72,13 @@ def merge_partial_indexes():
     # Create final index files for letters a-z and digits 0-9
     example_data = {}
     for letter in range(ord('a'), ord('z') + 1):
-        filename = f"{FINAL_INDEX_DIR}/{chr(letter)}_tokens.json"
+        filename = os.path.join(FINAL_INDEX_DIR, f"{chr(letter)}_tokens.json")
         with open(filename, 'w') as json_file:
             json.dump(example_data, json_file)
     print("26 JSON files created from a_tokens.json to z_tokens.json.")
 
-    for letter in range(ord('0'), ord('9') + 1):
-        filename = f"{FINAL_INDEX_DIR}/{chr(letter)}_tokens.json"
+    for digit in range(ord('0'), ord('9') + 1):
+        filename = os.path.join(FINAL_INDEX_DIR, f"{chr(digit)}_tokens.json")
         with open(filename, 'w') as json_file:
             json.dump(example_data, json_file)
     print("10 JSON files created from 0_tokens.json to 9_tokens.json.")
@@ -79,11 +86,10 @@ def merge_partial_indexes():
     # Initialize DF map
     df_map = defaultdict(int)
 
-    # Initialize a separate DF file
-    df_file_path = os.path.join(FINAL_INDEX_DIR, 'df.json')
-    if os.path.exists(df_file_path):
+    # Initialize DF file using DF_FILE from config
+    if os.path.exists(DF_FILE):
         # Load existing DF map if merging is incremental across multiple runs
-        with open(df_file_path, 'r') as df_file:
+        with open(DF_FILE, 'r') as df_file:
             existing_df = json.load(df_file)
             for term, df in existing_df.items():
                 df_map[term] += df
@@ -146,9 +152,9 @@ def merge_partial_indexes():
 
         print("All partial indexes merged successfully.")
 
-        # Save the updated DF map
-        save_json(df_map, df_file_path)
-        print(f"DF values saved to {df_file_path}")
+        # Save the updated DF map using DF_FILE
+        save_json(df_map, DF_FILE)
+        print(f"DF values saved to {DF_FILE}")
 
         # Compute IDF
         print("Computing IDF values...")

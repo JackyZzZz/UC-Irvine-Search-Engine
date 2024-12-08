@@ -8,6 +8,7 @@ DOC_MAPPING_FILE = os.path.join('..', 'doc_mapping.json')
 LOG_FILE = os.path.join('..', 'indexer.log')
 LINKS_FILE = os.path.join('..', 'links.json')
 IDF_FILE = os.path.join('..', 'idf.json')
+DF_FILE = os.path.join("..", 'df.json')
 
 # Indexing Parameters
 BATCH_SIZE = 10000  # Number of documents per partial index
