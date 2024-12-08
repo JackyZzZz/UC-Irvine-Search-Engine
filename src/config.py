@@ -10,6 +10,7 @@ LINKS_FILE = os.path.join('..', 'links.json')
 IDF_FILE = os.path.join('..', 'idf.json')
 DF_FILE = os.path.join("..", 'df.json')
 PAGERANK_FILE = os.path.join("..", 'page_rank.json')
+TOKEN_RETRIEVAL_OFFSET_FILE = os.path.join("..", 'token_retrieval_offset.json')
 
 # Indexing Parameters
 BATCH_SIZE = 10000  # Number of documents per partial index

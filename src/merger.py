@@ -3,6 +3,7 @@ import json
 import logging
 import math
 from collections import defaultdict
+from parse_file import processing_final_tokens
 from utils import setup_logging, save_json, load_json
 from config import (
     PARTIAL_INDEX_DIR, 
@@ -171,6 +172,10 @@ def merge_partial_indexes():
                 continue
 
         print("Merge and TF-IDF computation completed successfully!")
+
+        # Conver the file and data structures of the final index files for quicker retrieval
+        print("Staring converting indexes from json to txt")
+        processing_final_tokens()
 
     except Exception as e:
         logging.critical(f"Critical error during merging: {e}")

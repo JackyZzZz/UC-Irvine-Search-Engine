@@ -8,3 +8,4 @@ indexer.log
 links.json
 df.json
 idf.json
+token_retrieval_offset.json

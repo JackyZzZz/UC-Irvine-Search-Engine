@@ -1,7 +1,7 @@
 import json
 import argparse
 from nltk.stem import PorterStemmer
-from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE
+from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE, TOKEN_RETRIEVAL_OFFSET_FILE
 
 def search_with_query(limit, *args):
     stemer = PorterStemmer()
