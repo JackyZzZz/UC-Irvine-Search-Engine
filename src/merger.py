@@ -15,9 +15,6 @@ from config import (
 )
 
 def compute_idf(df_map, total_docs, idf_file):
-    """
-    Compute IDF for each term using the provided DF map and save to idf_file.
-    """
     idf = {}
     for term, df in df_map.items():
         if df > 0:
@@ -28,14 +25,6 @@ def compute_idf(df_map, total_docs, idf_file):
     return idf
 
 def compute_tfidf(index_chunk, idf):
-    """
-    Convert freq to TF-IDF by:
-    TF = 1 + log10(freq) if freq > 0 else 0
-    TF-IDF = TF * IDF
-
-    Current posting format: [doc_id, freq, [positions]]
-    After computation: [doc_id, tfidf, [positions]]
-    """
     for token, postings in index_chunk.items():
         term_idf = idf.get(token, 0.0)
         for entry in postings:
@@ -47,14 +36,11 @@ def compute_tfidf(index_chunk, idf):
             else:
                 tf = 0
             tfidf = tf * term_idf
-            # Update entry in place:
             entry[1] = tfidf  # Replace freq with tf-idf
-            # positions remain the same at entry[2]
     return index_chunk
 
 def merge_partial_indexes():
     setup_logging(LOG_FILE)
-    print("Starting merge process...")
 
     # Load doc_mapping to get total_docs
     if not os.path.exists(DOC_MAPPING_FILE):
@@ -68,9 +54,7 @@ def merge_partial_indexes():
     partial_files = sorted(os.listdir(PARTIAL_INDEX_DIR))
     total_files = len(partial_files)
     
-    print(f"Found {total_files} partial index files to merge")
 
-    # Create final index files for letters a-z and digits 0-9
     example_data = {}
     for letter in range(ord('a'), ord('z') + 1):
         filename = os.path.join(FINAL_INDEX_DIR, f"{chr(letter)}_tokens.json")
@@ -84,12 +68,8 @@ def merge_partial_indexes():
             json.dump(example_data, json_file)
     print("10 JSON files created from 0_tokens.json to 9_tokens.json.")
 
-    # Initialize DF map
     df_map = defaultdict(int)
-
-    # Initialize DF file using DF_FILE from config
     if os.path.exists(DF_FILE):
-        # Load existing DF map if merging is incremental across multiple runs
         with open(DF_FILE, 'r') as df_file:
             existing_df = json.load(df_file)
             for term, df in existing_df.items():
@@ -143,11 +123,9 @@ def merge_partial_indexes():
             print(f"Successfully merged {p_file}")
 
 
-        # Save the updated DF map using DF_FILE
         save_json(df_map, DF_FILE)
         print(f"DF values saved to {DF_FILE}")
 
-        # Compute IDF
         idf = compute_idf(df_map, total_docs, IDF_FILE)
         print(f"IDF values computed and saved to {IDF_FILE}")
 
@@ -161,8 +139,6 @@ def merge_partial_indexes():
                 # Compute TF-IDF
                 index_data = compute_tfidf(index_data, idf)
 
-                # Save back
-                # Sort again after computation
                 sorted_index_data = dict(sorted(index_data.items()))
                 save_json(sorted_index_data, final_path)
                 print(f"TF-IDF scores computed and updated in {final_file}")
