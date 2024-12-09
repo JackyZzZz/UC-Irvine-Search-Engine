@@ -7,6 +7,7 @@ from utils import setup_logging, save_json
 from config import DATA_DIR, PARTIAL_INDEX_DIR, DOC_MAPPING_FILE, LOG_FILE, BATCH_SIZE, LINKS_FILE
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+from simhash import Simhash
 
 def extract_outbound_links(content, base_url):
     """
@@ -37,6 +38,8 @@ def build_partial_indexes():
     doc_id = 1
     partial_count = 1
     total_docs = 0
+    exsisting_hash_values = []
+    duplicate_threshold = 2
 
     # Temporary storage for links in the form doc_id -> list_of_urls
     links_temp = defaultdict(list)
@@ -60,6 +63,17 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
+
+                                # Checking for duplicates and near duplicate:
+                                hash_value = Simhash(content)
+                                duplicate_detected = False
+                                for hash in exsisting_hash_values:
+                                    if hash_value.distance(hash) < duplicate_threshold:
+                                        duplicate_detected = True
+                                        break
+                                if duplicate_detected:
+                                    print("An similar file detected, skipping this one...")
+                                    continue
 
                                 # Skip URLs with fragments
                                 parsed_url = urlparse(url)
