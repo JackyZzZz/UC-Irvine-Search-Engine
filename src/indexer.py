@@ -68,14 +68,12 @@ def build_partial_indexes():
 
                                 doc_mapping[doc_id] = url
 
-                                # Tokenize with weights and positions
                                 weighted_tokens = tokenizer.tokenize_with_positions_and_weights(content)
 
                                 # weighted_tokens: token -> (total_weight, [positions])
                                 for token, (wfreq, positions) in weighted_tokens.items():
                                     inverted_index[token].append([doc_id, wfreq, positions])
 
-                                # Extract outbound links (fragments handled in extract_outbound_links)
                                 outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
                                     # Extend and deduplicate
