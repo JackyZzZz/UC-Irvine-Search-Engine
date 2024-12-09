@@ -4,15 +4,17 @@ import os
 
 # Add the src directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-from search import search_with_query
+from search import search_with_query, pre_loading_files
 
 app = Flask(__name__)
+
+pre_loading_files()
 
 # Simulated search results (replace with your actual search logic)
 def perform_search(query):
     # Split the query into individual terms and pass them as separate arguments
-    query_terms = query.split()
-    return search_with_query(5, *query_terms)
+    # query_terms = query.split()
+    return search_with_query(query)
 
 @app.route('/')
 def home():
@@ -28,4 +30,4 @@ def search():
     return render_template('results.html', query=query, results=results)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
