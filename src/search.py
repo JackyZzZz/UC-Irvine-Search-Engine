@@ -13,18 +13,14 @@ pagerank_scores = None
 def pre_loading_files():
     global doc_map, stemer, token_retrieval_offset_map, pagerank_scores
 
-    # Stemmer for query stemming
     stemer = PorterStemmer()
     
-    # Load doc_id -> url mapping
     with open(DOC_MAPPING_FILE, 'r') as file:
         doc_map = json.load(file)
 
-    # Load token retrieval offset map
     with open(TOKEN_RETRIEVAL_OFFSET_FILE, 'r') as file:
         token_retrieval_offset_map = json.load(file)
 
-    # Load PageRank scores
     with open(PAGERANK_FILE, 'r') as file:
         pagerank_scores = json.load(file)
 
@@ -35,17 +31,14 @@ def search_with_query(query, limit=20):
 
     results = []
 
-    # Stem the query terms
     stemmed_terms = sorted([stemer.stem(term) for term in query.strip().split()])
 
     docs_scores_map = {}
-    # We'll store positions as well: docs_positions_map = { doc_id: {term: [positions]} }
     docs_positions_map = {}
 
     previous_letter = None
     file = None
 
-    # Load postings for each term, sum TF-IDF scores, and collect positions
     for term in stemmed_terms:
         if term not in token_retrieval_offset_map:
             continue
@@ -76,15 +69,14 @@ def search_with_query(query, limit=20):
                 docs_positions_map[doc_id] = {}
             docs_positions_map[doc_id][term] = positions
 
-    # Close the last opened file
     if file:
         file.close()
 
-    # If there are multiple terms, consider proximity
+    # If multiple terms, calculate proximity bonus
     if len(stemmed_terms) > 1:
         unique_terms = list(set(stemmed_terms))
         if len(unique_terms) > 1:
-            for doc_id in docs_scores_map.keys():
+            for doc_id in list(docs_scores_map.keys()):
                 # Ensure all query terms appear in this doc
                 if all(t in docs_positions_map[doc_id] for t in unique_terms):
                     # Gather positions for each term
@@ -112,12 +104,14 @@ def search_with_query(query, limit=20):
                         # Proximity bonus: closer average distance → higher bonus
                         bonus = 2.0 / (1 + avg_min_distance)
                         docs_scores_map[doc_id] += bonus
+                else:
+                    # If not all terms appear, consider removing or leaving as-is
+                    pass
 
     # Incorporate PageRank
     for doc_id in docs_scores_map:
         pr_score = pagerank_scores.get(str(doc_id), 0.0)
         # Add PageRank to the final score
-        # You can weight it differently if desired, for now just add
         docs_scores_map[doc_id] += pr_score
 
     # Sort results by final score in descending order
@@ -126,7 +120,17 @@ def search_with_query(query, limit=20):
         # Limit the number of results to top 20 by default
         sorted_results = sorted_results[:limit]
 
+        # Filtering out certain extensions
+        excluded_extensions = ('.txt', '.php', ".pdf")
+        filtered_results = []
         for doc_id, score in sorted_results:
+            url = doc_map[str(doc_id)]
+            # Exclude results ending with certain extensions
+            if url.lower().endswith(excluded_extensions):
+                continue
+            filtered_results.append((doc_id, score))
+
+        for doc_id, score in filtered_results:
             url = doc_map[str(doc_id)]
             print(url, "(score:", score, ")")
             results.append({
