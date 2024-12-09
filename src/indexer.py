@@ -38,7 +38,10 @@ def build_partial_indexes():
     doc_id = 1
     partial_count = 1
     total_docs = 0
-    exsisting_hash_values = []
+
+    # Track seen hashes for duplicates
+    existing_hash_values = set()
+    existing_hash_list = []
     duplicate_threshold = 2
 
     # Temporary storage for links in the form doc_id -> list_of_urls
@@ -64,15 +67,30 @@ def build_partial_indexes():
                                 url = data.get('url', '')
                                 content = data.get('content', '')
 
-                                # Checking for duplicates and near duplicate:
-                                hash_value = Simhash(content)
+                                # Extract text content from HTML to avoid duplicates caused by markup differences
+                                soup = BeautifulSoup(content, 'html.parser')
+                                text_content = soup.get_text(separator=' ')
+                                clean_content = ' '.join(text_content.split())
+
+                                # Compute simhash for the textual content
+                                current_simhash = Simhash(clean_content)
+                                hash_value = current_simhash.value
+
+                                # Check exact duplicates
+                                if hash_value in existing_hash_values:
+                                    print("An exact duplicate detected, skipping this one...")
+                                    continue
+
+                                # Near-duplicate check
                                 duplicate_detected = False
-                                for hash in exsisting_hash_values:
-                                    if hash_value.distance(hash) < duplicate_threshold:
+                                for h_val in existing_hash_list:
+                                    # Reconstruct the previously stored Simhash using value=h_val
+                                    stored_simhash = Simhash(value=h_val)
+                                    if current_simhash.distance(stored_simhash) < duplicate_threshold:
                                         duplicate_detected = True
                                         break
                                 if duplicate_detected:
-                                    print("An similar file detected, skipping this one...")
+                                    print("A near duplicate detected, skipping this one...")
                                     continue
 
                                 # Skip URLs with fragments
@@ -80,8 +98,11 @@ def build_partial_indexes():
                                 if parsed_url.fragment:
                                     continue
 
-                                doc_mapping[doc_id] = url
+                                # Passed duplicates checks
+                                existing_hash_values.add(hash_value)
+                                existing_hash_list.append(hash_value)
 
+                                doc_mapping[doc_id] = url
                                 weighted_tokens = tokenizer.tokenize_with_positions_and_weights(content)
 
                                 # weighted_tokens: token -> (total_weight, [positions])
