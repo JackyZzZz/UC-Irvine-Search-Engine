@@ -10,10 +10,6 @@ from urllib.parse import urljoin, urlparse
 from simhash import Simhash
 
 def extract_outbound_links(content, base_url):
-    """
-    Extracts outbound links from HTML content, removing URLs with fragments
-    and deduplicating the final list.
-    """
     soup = BeautifulSoup(content, 'html.parser')
     outbound_links = set()
 
@@ -23,7 +19,6 @@ def extract_outbound_links(content, base_url):
         
         parsed_link = urlparse(full_link)
         if parsed_link.fragment:
-            # Skip links with fragments
             continue
 
         outbound_links.add(full_link)
@@ -39,7 +34,6 @@ def build_partial_indexes():
     partial_count = 1
     total_docs = 0
 
-    # Track seen hashes for duplicates
     existing_hash_values = set()
     existing_hash_list = []
     duplicate_threshold = 2
@@ -66,25 +60,19 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
-
-                                # Extract text content from HTML to avoid duplicates caused by markup differences
                                 soup = BeautifulSoup(content, 'html.parser')
                                 text_content = soup.get_text(separator=' ')
                                 clean_content = ' '.join(text_content.split())
 
-                                # Compute simhash for the textual content
                                 current_simhash = Simhash(clean_content)
                                 hash_value = current_simhash.value
 
-                                # Check exact duplicates
                                 if hash_value in existing_hash_values:
                                     print("An exact duplicate detected, skipping this one...")
                                     continue
 
-                                # Near-duplicate check
                                 duplicate_detected = False
                                 for h_val in existing_hash_list:
-                                    # Reconstruct the previously stored Simhash using value=h_val
                                     stored_simhash = Simhash(value=h_val)
                                     if current_simhash.distance(stored_simhash) < duplicate_threshold:
                                         duplicate_detected = True
@@ -93,12 +81,10 @@ def build_partial_indexes():
                                     print("A near duplicate detected, skipping this one...")
                                     continue
 
-                                # Skip URLs with fragments
                                 parsed_url = urlparse(url)
                                 if parsed_url.fragment:
                                     continue
 
-                                # Passed duplicates checks
                                 existing_hash_values.add(hash_value)
                                 existing_hash_list.append(hash_value)
 
@@ -111,7 +97,6 @@ def build_partial_indexes():
 
                                 outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
-                                    # Extend and deduplicate
                                     links_temp[doc_id].extend(outbound_links)
                                     links_temp[doc_id] = list(set(links_temp[doc_id]))
 
@@ -122,7 +107,7 @@ def build_partial_indexes():
                                 if total_docs % 100 == 0:
                                     print(f"Processed {total_docs} documents...")
 
-                            # Save partial indexes if batch size reached
+
                             if (doc_id - 1) % BATCH_SIZE == 0:
                                 inverted_index = dict(sorted(inverted_index.items()))
                                 print(f"\nSaving partial index {partial_count} ({len(inverted_index)} terms)...")
@@ -138,7 +123,6 @@ def build_partial_indexes():
                     
                     print(f"Completed domain {data_folder}: processed {domain_docs} documents")
 
-        # Save any remaining documents
         if inverted_index:
             inverted_index = dict(sorted(inverted_index.items()))
             print(f"\nSaving final partial index {partial_count}...")
@@ -150,7 +134,6 @@ def build_partial_indexes():
         save_json(doc_mapping, DOC_MAPPING_FILE)
         print(f"Indexing complete! Processed {total_docs} documents in total")
 
-        # Resolve URLs in links_temp to doc_ids
         url_to_doc_id = {v: k for k, v in doc_mapping.items()}
         links_graph = {}
         for source_doc_id, url_list in links_temp.items():

@@ -42,7 +42,6 @@ def compute_tfidf(index_chunk, idf):
 def merge_partial_indexes():
     setup_logging(LOG_FILE)
 
-    # Load doc_mapping to get total_docs
     if not os.path.exists(DOC_MAPPING_FILE):
         raise FileNotFoundError("Document mapping file not found. Cannot compute TF-IDF.")
     with open(DOC_MAPPING_FILE, 'r') as f:
@@ -79,16 +78,13 @@ def merge_partial_indexes():
     try:
         for i, p_file in enumerate(partial_files, 1):
             p_path = os.path.join(PARTIAL_INDEX_DIR, p_file)
-            print(f"Processing file {i}/{total_files}: {p_file}")
             try:
                 with open(p_path, 'r', encoding='utf-8') as pf:
                     partial_index = json.load(pf)
             except Exception as e:
-                logging.error(f"Error loading partial file {p_path}: {e}")
                 print(f"Error loading {p_file}: {e}")
                 continue
 
-            # Group tokens by their starting character
             tokens_by_letter = defaultdict(list)
             for token, postings in partial_index.items():
                 first_char = token[0].lower()
@@ -96,14 +92,12 @@ def merge_partial_indexes():
                 df_map[token] += len(postings)
 
 
-            # For each group, update the corresponding final index file
             for letter, tokens in tokens_by_letter.items():
                 final_index_file = os.path.join(FINAL_INDEX_DIR, f"{letter}_tokens.json")
                 try:
                     with open(final_index_file, 'r') as ff:
                         final_index = json.load(ff)
                 except Exception as e:
-                    logging.error(f"Error loading final index file {final_index_file}: {e}")
                     print(f"Error loading final index file {final_index_file}: {e}")
                     continue
 
@@ -113,13 +107,10 @@ def merge_partial_indexes():
                     else:
                         final_index[token] = postings
 
-                # Sort tokens alphabetically for consistency
                 sorted_final_index = dict(sorted(final_index.items()))
                 save_json(sorted_final_index, final_index_file)
-                print(f"Updated {final_index_file} with tokens starting with '{letter}'")
 
 
-            logging.info(f"Merged {p_file} successfully.")
             print(f"Successfully merged {p_file}")
 
 
@@ -136,25 +127,22 @@ def merge_partial_indexes():
                 with open(final_path, 'r') as f_final:
                     index_data = json.load(f_final)
 
-                # Compute TF-IDF
                 index_data = compute_tfidf(index_data, idf)
 
                 sorted_index_data = dict(sorted(index_data.items()))
                 save_json(sorted_index_data, final_path)
                 print(f"TF-IDF scores computed and updated in {final_file}")
             except Exception as e:
-                logging.error(f"Error processing final index file {final_path}: {e}")
                 print(f"Error processing final index file {final_path}: {e}")
                 continue
 
         print("Merge and TF-IDF computation completed successfully!")
 
-        # Conver the file and data structures of the final index files for quicker retrieval
+        # Convert the file and data structures of the final index files for quicker retrieval
         print("Staring converting indexes from json to txt")
         processing_final_tokens()
 
     except Exception as e:
-        logging.critical(f"Critical error during merging: {e}")
         print(f"Critical error occurred: {e}")
 
 if __name__ == "__main__":

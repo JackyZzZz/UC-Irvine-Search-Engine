@@ -8,7 +8,6 @@ def compute_pagerank(links_graph, damping=0.85, max_iterations=100, tolerance=1.
     if n == 0:
         return {}
 
-    # Initialize pagerank values
     pr_values = {doc_id: 1.0 / n for doc_id in doc_ids}
 
     # Precompute out-degree
@@ -46,18 +45,16 @@ def main():
     with open(LINKS_FILE, 'r', encoding='utf-8') as f:
         links_graph = json.load(f)
 
-    # Convert keys and their list items to integers
     links_graph = {int(k): [int(x) for x in v] for k, v in links_graph.items()}
 
     # Remove self-links
     for doc_id in list(links_graph.keys()):
         links_graph[doc_id] = [x for x in links_graph[doc_id] if x != doc_id]
 
-    # Ensure that every target node is present in the graph
+
     all_targets = {t for targets in links_graph.values() for t in targets}
     for t in all_targets:
         if t not in links_graph:
-            # Add this missing node with no outlinks
             links_graph[t] = []
 
     pagerank_scores = compute_pagerank(links_graph)
