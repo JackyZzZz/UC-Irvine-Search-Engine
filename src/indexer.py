@@ -10,10 +10,6 @@ from urllib.parse import urljoin, urlparse
 from simhash import Simhash
 
 def extract_outbound_links(content, base_url):
-    """
-    Extracts outbound links from HTML content, removing URLs with fragments
-    and deduplicating the final list.
-    """
     soup = BeautifulSoup(content, 'html.parser')
     outbound_links = set()
 
@@ -23,7 +19,6 @@ def extract_outbound_links(content, base_url):
         
         parsed_link = urlparse(full_link)
         if parsed_link.fragment:
-            # Skip links with fragments
             continue
 
         outbound_links.add(full_link)
@@ -36,13 +31,15 @@ def build_partial_indexes():
     inverted_index = defaultdict(list)  # token -> list of [doc_id, weight, [positions]]
     doc_mapping = dict()
     exsisting_url = set()
+    doc_mapping = dict()
+    exsisting_url = set()
     doc_id = 1
     partial_count = 1
     total_docs = 0
     exsisting_hash_values = []
     duplicate_threshold = 1
+    duplicate_threshold = 1
 
-    # Temporary storage for links in the form doc_id -> list_of_urls
     links_temp = defaultdict(list)
 
     print("Starting indexing process...")
@@ -81,14 +78,23 @@ def build_partial_indexes():
                                 text = ' '.join(sim_soup.stripped_strings)
                                 text = text.lower()
                                 hash_value = Simhash(text)
+                                sim_soup = BeautifulSoup(content, 'html.parser') 
+                                for tag in sim_soup(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'noscript']):
+                                    tag.decompose()
+                                text = ' '.join(sim_soup.stripped_strings)
+                                text = text.lower()
+                                hash_value = Simhash(text)
                                 duplicate_detected = False
                                 for hash in exsisting_hash_values:
+                                    if hash_value.distance(hash) <= duplicate_threshold:
                                     if hash_value.distance(hash) <= duplicate_threshold:
                                         duplicate_detected = True
                                         break
                                 if duplicate_detected:
                                     print("An similar file detected, skipping this one...")
                                     continue
+                                exsisting_hash_values.append(hash_value)
+                                exsisting_url.add(url)
                                 exsisting_hash_values.append(hash_value)
                                 exsisting_url.add(url)
                                 doc_mapping[doc_id] = url
