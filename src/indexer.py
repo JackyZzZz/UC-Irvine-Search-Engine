@@ -34,12 +34,13 @@ def build_partial_indexes():
     setup_logging(LOG_FILE)
     tokenizer = Tokenizer()
     inverted_index = defaultdict(list)  # token -> list of [doc_id, weight, [positions]]
-    doc_mapping = {}
+    doc_mapping = dict()
+    exsisting_url = set()
     doc_id = 1
     partial_count = 1
     total_docs = 0
     exsisting_hash_values = []
-    duplicate_threshold = 2
+    duplicate_threshold = 1
 
     # Temporary storage for links in the form doc_id -> list_of_urls
     links_temp = defaultdict(list)
@@ -64,15 +65,8 @@ def build_partial_indexes():
                                 url = data.get('url', '')
                                 content = data.get('content', '')
 
-                                # Checking for duplicates and near duplicate:
-                                hash_value = Simhash(content)
-                                duplicate_detected = False
-                                for hash in exsisting_hash_values:
-                                    if hash_value.distance(hash) < duplicate_threshold:
-                                        duplicate_detected = True
-                                        break
-                                if duplicate_detected:
-                                    print("An similar file detected, skipping this one...")
+
+                                if url in exsisting_url:
                                     continue
 
                                 # Skip URLs with fragments
@@ -80,6 +74,23 @@ def build_partial_indexes():
                                 if parsed_url.fragment:
                                     continue
 
+                                # Checking for duplicates and near duplicate:
+                                sim_soup = BeautifulSoup(content, 'html.parser') 
+                                for tag in sim_soup(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'noscript']):
+                                    tag.decompose()
+                                text = ' '.join(sim_soup.stripped_strings)
+                                text = text.lower()
+                                hash_value = Simhash(text)
+                                duplicate_detected = False
+                                for hash in exsisting_hash_values:
+                                    if hash_value.distance(hash) <= duplicate_threshold:
+                                        duplicate_detected = True
+                                        break
+                                if duplicate_detected:
+                                    print("An similar file detected, skipping this one...")
+                                    continue
+                                exsisting_hash_values.append(hash_value)
+                                exsisting_url.add(url)
                                 doc_mapping[doc_id] = url
 
                                 weighted_tokens = tokenizer.tokenize_with_positions_and_weights(content)
