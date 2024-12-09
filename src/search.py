@@ -14,7 +14,7 @@ def pre_loading_files():
     global doc_map, stemer, token_retrieval_offset_map, pagerank_scores
 
     stemer = PorterStemmer()
-    
+
     with open(DOC_MAPPING_FILE, 'r') as file:
         doc_map = json.load(file)
 
@@ -24,7 +24,7 @@ def pre_loading_files():
     with open(PAGERANK_FILE, 'r') as file:
         pagerank_scores = json.load(file)
 
-def search_with_query(query, limit=20):
+def search_with_query(query, limit=100):
     start_time = time.time()
 
     global stemer, doc_map, token_retrieval_offset_map, pagerank_scores
@@ -39,6 +39,7 @@ def search_with_query(query, limit=20):
     previous_letter = None
     file = None
 
+    # Retrieve postings for each stemmed term and accumulate scores
     for term in stemmed_terms:
         if term not in token_retrieval_offset_map:
             continue
@@ -72,40 +73,40 @@ def search_with_query(query, limit=20):
     if file:
         file.close()
 
-    # If multiple terms, calculate proximity bonus
-    if len(stemmed_terms) > 1:
-        unique_terms = list(set(stemmed_terms))
-        if len(unique_terms) > 1:
-            for doc_id in list(docs_scores_map.keys()):
-                # Ensure all query terms appear in this doc
-                if all(t in docs_positions_map[doc_id] for t in unique_terms):
-                    # Gather positions for each term
-                    terms_positions = [docs_positions_map[doc_id][t] for t in unique_terms]
+    unique_terms = set(stemmed_terms)
 
-                    # Compute minimal pairwise distances between terms
-                    pairwise_distances = []
-                    for (pos_a, pos_b) in combinations(terms_positions, 2):
-                        i, j = 0, 0
-                        local_min_dist = float('inf')
-                        # Find minimal distance efficiently since positions are sorted
-                        while i < len(pos_a) and j < len(pos_b):
-                            dist = abs(pos_a[i] - pos_b[j])
-                            if dist < local_min_dist:
-                                local_min_dist = dist
-                            if pos_a[i] < pos_b[j]:
-                                i += 1
-                            else:
-                                j += 1
-                        pairwise_distances.append(local_min_dist)
+    # If multiple terms, calculate proximity bonus ONLY for documents containing all terms
+    if len(stemmed_terms) > 1 and len(unique_terms) > 1:
+        for doc_id in docs_scores_map.keys():
+            # Check if doc has all terms
+            if doc_id in docs_positions_map and all(term in docs_positions_map[doc_id] for term in unique_terms):
+                # Gather positions for each term
+                terms_positions = [docs_positions_map[doc_id][t] for t in unique_terms]
 
-                    # Compute a proximity bonus if we have distances
-                    if pairwise_distances:
-                        avg_min_distance = sum(pairwise_distances) / len(pairwise_distances)
-                        # Proximity bonus: closer average distance → higher bonus
-                        bonus = 2.0 / (1 + avg_min_distance)
-                        docs_scores_map[doc_id] += bonus
+                # Compute minimal pairwise distances between terms
+                pairwise_distances = []
+                for (pos_a, pos_b) in combinations(terms_positions, 2):
+                    i, j = 0, 0
+                    local_min_dist = float('inf')
+                    # Since positions are sorted, we can find minimal distance efficiently
+                    while i < len(pos_a) and j < len(pos_b):
+                        dist = abs(pos_a[i] - pos_b[j])
+                        if dist < local_min_dist:
+                            local_min_dist = dist
+                        if pos_a[i] < pos_b[j]:
+                            i += 1
+                        else:
+                            j += 1
+                    pairwise_distances.append(local_min_dist)
 
-    # Incorporate PageRank
+                # Compute a proximity bonus if we have distances
+                if pairwise_distances:
+                    avg_min_distance = sum(pairwise_distances) / len(pairwise_distances)
+                    # Proximity bonus: closer average distance → higher bonus
+                    bonus = 2.0 / (1 + avg_min_distance)
+                    docs_scores_map[doc_id] += bonus
+
+    # Incorporate PageRank for all documents
     for doc_id in docs_scores_map:
         pr_score = pagerank_scores.get(str(doc_id), 0.0)
         # Add PageRank to the final score
@@ -114,16 +115,15 @@ def search_with_query(query, limit=20):
     # Sort results by final score in descending order
     if docs_scores_map:
         sorted_results = sorted(docs_scores_map.items(), key=lambda x: x[1], reverse=True)
-        # Limit the number of results to top 20 by default
+        # Limit the number of results to top N by default
         sorted_results = sorted_results[:limit]
 
         # Filtering out certain extensions and URLs containing '?'
-        excluded_extensions = ('.txt', '.php', '.pdf')
+        excluded_extensions = ('.txt', '.php', '.pdf', ".sql", ".log", ".htm")
         filtered_results = []
         for doc_id, score in sorted_results:
             url = doc_map[str(doc_id)]
-            # Exclude results ending with certain extensions
-            # and also exclude URLs containing '?'
+            # Exclude results ending with certain extensions and URLs containing '?'
             if url.lower().endswith(excluded_extensions) or '?' in url:
                 continue
             filtered_results.append((doc_id, score))
@@ -145,4 +145,4 @@ if __name__ == "__main__":
     pre_loading_files()
     while True:
         query = input("Please enter your query here:")
-        search_with_query(query, limit=20)
+        search_with_query(query, limit=100)
