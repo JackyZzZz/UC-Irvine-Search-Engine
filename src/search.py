@@ -104,9 +104,6 @@ def search_with_query(query, limit=20):
                         # Proximity bonus: closer average distance → higher bonus
                         bonus = 2.0 / (1 + avg_min_distance)
                         docs_scores_map[doc_id] += bonus
-                else:
-                    # If not all terms appear, consider removing or leaving as-is
-                    pass
 
     # Incorporate PageRank
     for doc_id in docs_scores_map:
@@ -120,13 +117,14 @@ def search_with_query(query, limit=20):
         # Limit the number of results to top 20 by default
         sorted_results = sorted_results[:limit]
 
-        # Filtering out certain extensions
-        excluded_extensions = ('.txt', '.php', ".pdf")
+        # Filtering out certain extensions and URLs containing '?'
+        excluded_extensions = ('.txt', '.php', '.pdf')
         filtered_results = []
         for doc_id, score in sorted_results:
             url = doc_map[str(doc_id)]
             # Exclude results ending with certain extensions
-            if url.lower().endswith(excluded_extensions):
+            # and also exclude URLs containing '?'
+            if url.lower().endswith(excluded_extensions) or '?' in url:
                 continue
             filtered_results.append((doc_id, score))
 
