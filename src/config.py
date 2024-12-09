@@ -13,7 +13,7 @@ PAGERANK_FILE = os.path.join("..", 'page_rank.json')
 TOKEN_RETRIEVAL_OFFSET_FILE = os.path.join("..", 'token_retrieval_offset.json')
 
 # Indexing Parameters
-BATCH_SIZE = 10000  # Number of documents per partial index
+BATCH_SIZE = 6000 # Number of documents per partial index
 
 # Ensure directories exist
 os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
