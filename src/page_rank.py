@@ -1,18 +1,8 @@
 import json
-import logging
+import os
 from config import LINKS_FILE, DOC_MAPPING_FILE, PAGERANK_FILE
 
 def compute_pagerank(links_graph, damping=0.85, max_iterations=100, tolerance=1.0e-6):
-    """
-    Compute PageRank for each document using the power iteration method.
-
-    :param links_graph: dict, doc_id -> list of outlinked doc_ids
-    :param damping: The damping factor for PageRank
-    :param max_iterations: Maximum number of iterations
-    :param tolerance: Convergence threshold
-    :return: dict of doc_id -> pagerank score
-    """
-    # Extract all doc_ids
     doc_ids = list(links_graph.keys())
     n = len(doc_ids)
     if n == 0:
@@ -21,66 +11,59 @@ def compute_pagerank(links_graph, damping=0.85, max_iterations=100, tolerance=1.
     # Initialize pagerank values
     pr_values = {doc_id: 1.0 / n for doc_id in doc_ids}
 
-    # Precompute out-degree for efficiency
-    out_degree = {doc_id: len(links) for doc_id, links in links_graph.items()}
-
-    # Handle documents with no outlinks by treating them as linking to all docs (including themselves)
-    # or distribute their PR evenly. Another option is to store a separate list of "dangling nodes".
-    # For simplicity, we’ll consider dangling pages as linking to all other pages.
+    # Precompute out-degree
+    out_degree = {doc_id: len(links_graph[doc_id]) for doc_id in doc_ids}
     dangling_nodes = [doc for doc, deg in out_degree.items() if deg == 0]
+
+    # Precompute inbound links
+    inbound_links = {doc_id: [] for doc_id in doc_ids}
+    for doc_id, outlinks in links_graph.items():
+        for target in outlinks:
+            inbound_links[target].append(doc_id)
 
     for iteration in range(max_iterations):
         prev_pr = pr_values.copy()
-        # Compute the sum of PR of dangling nodes
         dangling_sum = sum(prev_pr[d] for d in dangling_nodes)
 
-        # Distribute PR
         for doc_id in doc_ids:
-            # Base portion from dangling nodes and random jump (teleportation)
             rank = (1 - damping) / n
             rank += damping * (dangling_sum / n)
-
-            # Add contributions from inbound links
-            # Inbound links are implicitly defined: any doc that has doc_id in its outlinks
-            # Instead of inverting the graph here, we can just loop through links_graph
-            # but that would be O(n^2). For large graphs, consider precomputing inbound links.
-            # For a small example or a simplified scenario, we can do a direct approach:
-            for other_doc in doc_ids:
-                if doc_id in links_graph[other_doc] and out_degree[other_doc] > 0:
-                    rank += damping * (prev_pr[other_doc] / out_degree[other_doc])
-
+            for in_doc in inbound_links[doc_id]:
+                rank += damping * (prev_pr[in_doc] / out_degree[in_doc])
             pr_values[doc_id] = rank
 
-        # Check for convergence
         diff = sum(abs(pr_values[d] - prev_pr[d]) for d in doc_ids)
         if diff < tolerance:
-            print(f"PageRank converged after {iteration+1} iterations.")
             break
 
     return pr_values
 
-
 def main():
-    # Setup logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+    
+    if not os.path.exists(LINKS_FILE):
+        raise FileNotFoundError(f"{LINKS_FILE} not found.")
 
-    # Load link graph
-    with open(LINKS_FILE, 'r') as f:
+    with open(LINKS_FILE, 'r', encoding='utf-8') as f:
         links_graph = json.load(f)
 
-    # Compute PageRank
+    # Convert keys and their list items to integers
+    links_graph = {int(k): [int(x) for x in v] for k, v in links_graph.items()}
+
+    # Remove self-links
+    for doc_id in list(links_graph.keys()):
+        links_graph[doc_id] = [x for x in links_graph[doc_id] if x != doc_id]
+
+    # Ensure that every target node is present in the graph
+    all_targets = {t for targets in links_graph.values() for t in targets}
+    for t in all_targets:
+        if t not in links_graph:
+            # Add this missing node with no outlinks
+            links_graph[t] = []
+
     pagerank_scores = compute_pagerank(links_graph)
 
-    # (Optional) you can map doc_ids back to URLs if needed
-    # with open(DOC_MAPPING_FILE, 'r') as f:
-    #     doc_mapping = json.load(f)
-    # url_pagerank = {doc_mapping[str(doc_id)]: score for doc_id, score in pagerank_scores.items()}
-
-    # Save PageRank results
-    with open(PAGERANK_FILE, 'w') as f:
+    with open(PAGERANK_FILE, 'w', encoding='utf-8') as f:
         json.dump(pagerank_scores, f, indent=2)
-    print(f"PageRank scores saved to {PAGERANK_FILE}")
-
 
 if __name__ == "__main__":
     main()

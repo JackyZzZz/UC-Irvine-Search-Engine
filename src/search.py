@@ -1,57 +1,58 @@
 import json
 from nltk.stem import PorterStemmer
-from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE, TOKEN_RETRIEVAL_OFFSET_FILE
+from config import FINAL_INDEX_DIR, DOC_MAPPING_FILE, TOKEN_RETRIEVAL_OFFSET_FILE, PAGERANK_FILE
 from parse_file import load_token_data
 import time
+from itertools import combinations
 
 doc_map = None
 stemer = None
 token_retrieval_offset_map = None
+pagerank_scores = None
 
 def pre_loading_files():
-    global doc_map, stemer, token_retrieval_offset_map
+    global doc_map, stemer, token_retrieval_offset_map, pagerank_scores
 
-    # stemer for query stemming
     stemer = PorterStemmer()
     
-    # Load doc_id -> url mapping
     with open(DOC_MAPPING_FILE, 'r') as file:
         doc_map = json.load(file)
 
     with open(TOKEN_RETRIEVAL_OFFSET_FILE, 'r') as file:
         token_retrieval_offset_map = json.load(file)
 
-def search_with_query(query, limit = 1000):
+    with open(PAGERANK_FILE, 'r') as file:
+        pagerank_scores = json.load(file)
+
+def search_with_query(query, limit=20):
     start_time = time.time()
 
-    global stemer, doc_map, token_retrieval_offset_map
+    global stemer, doc_map, token_retrieval_offset_map, pagerank_scores
 
     results = []
 
-    # Stem the query terms
     stemmed_terms = sorted([stemer.stem(term) for term in query.strip().split()])
 
     docs_scores_map = {}
-    # We'll store positions as well: docs_positions_map = { doc_id: {term: [positions]} }
     docs_positions_map = {}
 
     previous_letter = None
     file = None
 
-    # Load postings for each term, sum TF-IDF scores, and collect positions
     for term in stemmed_terms:
-
-        if not term in token_retrieval_offset_map:
+        if term not in token_retrieval_offset_map:
             continue
-        
+
         starting_letter = term.lower()[0]
 
+        # Open the correct index file if needed
         if starting_letter != previous_letter:
             if file:
                 file.close()
             file = open(f"{FINAL_INDEX_DIR}/{starting_letter}_tokens.txt", 'r')
             previous_letter = starting_letter
 
+        # Retrieve postings for this term
         for posting in load_token_data(file, token_retrieval_offset_map[term]):
             doc_id = posting[0]
             tfidf_score = posting[1]
@@ -63,86 +64,87 @@ def search_with_query(query, limit = 1000):
             else:
                 docs_scores_map[doc_id] = tfidf_score
 
-            # Store positions for each term in docs_positions_map
+            # Store positions for each term
             if doc_id not in docs_positions_map:
                 docs_positions_map[doc_id] = {}
             docs_positions_map[doc_id][term] = positions
 
-    # If there are multiple terms, we’ll consider proximity
-    if len(stemmed_terms) > 1:
-        # For each doc, compute minimal distance between any pair of terms
-        # For simplicity, if there are more than two terms, we can consider pairwise minimum distances
-        # and sum or average them. Here, we’ll show a simple example for two terms.
-        # If you have N terms, you'd extend this logic to compute a composite proximity measure.
-        unique_terms = list(set(stemmed_terms))  # to avoid duplicates if query terms repeat
-        if len(unique_terms) >= 2:
-            for doc_id in docs_scores_map.keys():
-                # Ensure all terms appear in doc
-                if all(t in docs_positions_map[doc_id] for t in unique_terms):
-                    # Compute min distance between terms
-                    # For demonstration, let's say we only handle two terms. For more, you'd generalize.
-                    # Example: If we have 2 terms: term1, term2
-                    # Find minimal distance between any position of term1 and term2.
-                    term_positions = [docs_positions_map[doc_id][t] for t in unique_terms]
-                    
-                    # If we have more than two terms, you can iterate over pairs.
-                    # Here assume just two terms for simplicity:
-                    if len(term_positions) == 2:
-                        positions_a = term_positions[0]
-                        positions_b = term_positions[1]
+    if file:
+        file.close()
 
-                        min_distance = float('inf')
-                        # Find minimal absolute difference between any position in positions_a and positions_b
-                        # Since positions are sorted (they should be as we appended them in order), 
-                        # we can do a linear merge to find min distance efficiently.
+    # If multiple terms, calculate proximity bonus
+    if len(stemmed_terms) > 1:
+        unique_terms = list(set(stemmed_terms))
+        if len(unique_terms) > 1:
+            for doc_id in list(docs_scores_map.keys()):
+                # Ensure all query terms appear in this doc
+                if all(t in docs_positions_map[doc_id] for t in unique_terms):
+                    # Gather positions for each term
+                    terms_positions = [docs_positions_map[doc_id][t] for t in unique_terms]
+
+                    # Compute minimal pairwise distances between terms
+                    pairwise_distances = []
+                    for (pos_a, pos_b) in combinations(terms_positions, 2):
                         i, j = 0, 0
-                        while i < len(positions_a) and j < len(positions_b):
-                            dist = abs(positions_a[i] - positions_b[j])
-                            if dist < min_distance:
-                                min_distance = dist
-                            # Move the pointer for whichever list has a smaller position to find a closer match
-                            if positions_a[i] < positions_b[j]:
+                        local_min_dist = float('inf')
+                        # Find minimal distance efficiently since positions are sorted
+                        while i < len(pos_a) and j < len(pos_b):
+                            dist = abs(pos_a[i] - pos_b[j])
+                            if dist < local_min_dist:
+                                local_min_dist = dist
+                            if pos_a[i] < pos_b[j]:
                                 i += 1
                             else:
                                 j += 1
+                        pairwise_distances.append(local_min_dist)
 
-                        # Apply a proximity bonus.
-                        # For example, if min_distance = 0 means same position (which can't happen since different terms),
-                        # min_distance = 1 means consecutive words.
-                        # Let's say we do: bonus = 2/(1+min_distance)
-                        # If terms appear consecutively (min_distance=1), bonus = 2/2=1 extra point
-                        # If they're far apart, bonus approaches 0.
-                        bonus = 2.0 / (1 + min_distance)
+                    # Compute a proximity bonus if we have distances
+                    if pairwise_distances:
+                        avg_min_distance = sum(pairwise_distances) / len(pairwise_distances)
+                        # Proximity bonus: closer average distance → higher bonus
+                        bonus = 2.0 / (1 + avg_min_distance)
                         docs_scores_map[doc_id] += bonus
+                else:
+                    # If not all terms appear, consider removing or leaving as-is
+                    pass
 
-                    # If you have more than two terms, you could:
-                    # - Compute pairwise distances and average them
-                    # - Or find a measure that rewards documents where all terms appear closely together.
+    # Incorporate PageRank
+    for doc_id in docs_scores_map:
+        pr_score = pagerank_scores.get(str(doc_id), 0.0)
+        # Add PageRank to the final score
+        docs_scores_map[doc_id] += pr_score
 
-    # Sort results by final score (descending)
+    # Sort results by final score in descending order
     if docs_scores_map:
         sorted_results = sorted(docs_scores_map.items(), key=lambda x: x[1], reverse=True)
-        # Limit the number of results
+        # Limit the number of results to top 20 by default
         sorted_results = sorted_results[:limit]
 
+        # Filtering out certain extensions
+        excluded_extensions = ('.txt', '.php', ".pdf")
+        filtered_results = []
         for doc_id, score in sorted_results:
+            url = doc_map[str(doc_id)]
+            # Exclude results ending with certain extensions
+            if url.lower().endswith(excluded_extensions):
+                continue
+            filtered_results.append((doc_id, score))
+
+        for doc_id, score in filtered_results:
             url = doc_map[str(doc_id)]
             print(url, "(score:", score, ")")
             results.append({
                 'url': url,
                 'title': url.split('/')[-1] or url
             })
-    
-    end_time = time.time()
 
-    print(f'\nThis search causes {end_time - start_time} seconds\n')
+    end_time = time.time()
+    print(f'\nThis search took {end_time - start_time} seconds\n')
 
     return results
 
 if __name__ == "__main__":
-    
     pre_loading_files()
-
     while True:
         query = input("Please enter your query here:")
-        search_with_query(query)
+        search_with_query(query, limit=20)

@@ -1,5 +1,6 @@
 import json
 from config import FINAL_INDEX_DIR, TOKEN_RETRIEVAL_OFFSET_FILE
+import os
 
 
 def tokens_load_for_read(json_file):
