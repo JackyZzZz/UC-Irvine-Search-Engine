@@ -58,28 +58,11 @@ def build_partial_indexes():
                                 data = json.load(f)
                                 url = data.get('url', '')
                                 content = data.get('content', '')
-                                soup = BeautifulSoup(content, 'html.parser')
-                                text_content = soup.get_text(separator=' ')
-                                clean_content = ' '.join(text_content.split())
 
-                                current_simhash = Simhash(clean_content)
-                                hash_value = current_simhash.value
 
-                                if hash_value in existing_hash_values:
-                                    print("An exact duplicate detected, skipping this one...")
+                                if url in exsisting_url:
                                     continue
 
-                                duplicate_detected = False
-                                for h_val in existing_hash_list:
-                                    stored_simhash = Simhash(value=h_val)
-                                    if current_simhash.distance(stored_simhash) < duplicate_threshold:
-                                        duplicate_detected = True
-                                        break
-                                if duplicate_detected:
-                                    print("A near duplicate detected, skipping this one...")
-                                    continue
-
-                                # Skip URLs with fragments
                                 parsed_url = urlparse(url)
                                 if parsed_url.fragment:
                                     continue
@@ -102,6 +85,7 @@ def build_partial_indexes():
                                 exsisting_hash_values.append(hash_value)
                                 exsisting_url.add(url)
                                 doc_mapping[doc_id] = url
+
                                 weighted_tokens = tokenizer.tokenize_with_positions_and_weights(content)
 
                                 # weighted_tokens: token -> (total_weight, [positions])
@@ -110,6 +94,7 @@ def build_partial_indexes():
 
                                 outbound_links = extract_outbound_links(content, url)
                                 if outbound_links:
+                                    # Extend and deduplicate
                                     links_temp[doc_id].extend(outbound_links)
                                     links_temp[doc_id] = list(set(links_temp[doc_id]))
 
@@ -120,7 +105,7 @@ def build_partial_indexes():
                                 if total_docs % 100 == 0:
                                     print(f"Processed {total_docs} documents...")
 
-
+                            # Save partial indexes if batch size reached
                             if (doc_id - 1) % BATCH_SIZE == 0:
                                 inverted_index = dict(sorted(inverted_index.items()))
                                 print(f"\nSaving partial index {partial_count} ({len(inverted_index)} terms)...")
@@ -136,6 +121,7 @@ def build_partial_indexes():
                     
                     print(f"Completed domain {data_folder}: processed {domain_docs} documents")
 
+        # Save any remaining documents
         if inverted_index:
             inverted_index = dict(sorted(inverted_index.items()))
             print(f"\nSaving final partial index {partial_count}...")
@@ -147,6 +133,7 @@ def build_partial_indexes():
         save_json(doc_mapping, DOC_MAPPING_FILE)
         print(f"Indexing complete! Processed {total_docs} documents in total")
 
+        # Resolve URLs in links_temp to doc_ids
         url_to_doc_id = {v: k for k, v in doc_mapping.items()}
         links_graph = {}
         for source_doc_id, url_list in links_temp.items():
