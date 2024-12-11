@@ -10,10 +10,7 @@ app = Flask(__name__)
 
 pre_loading_files()
 
-# Simulated search results (replace with your actual search logic)
 def perform_search(query):
-    # Split the query into individual terms and pass them as separate arguments
-    # query_terms = query.split()
     return search_with_query(query)
 
 @app.route('/')
