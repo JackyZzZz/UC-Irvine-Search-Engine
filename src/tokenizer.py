@@ -15,7 +15,6 @@ class Tokenizer:
         self.bold_weight = 1.5
         self.main_weight = 1.0
         
-        # You can provide a predefined set of stop words or load them from a file
         self.stop_words = stop_words if stop_words else set()
 
     def tokenize_and_filter(self, text):
@@ -54,14 +53,9 @@ class Tokenizer:
         token_data = defaultdict(lambda: {"weight":0.0, "positions":[]})
 
         for i, t in enumerate(main_tokens):
-            # Skip stop words entirely or give them no extra weight
             if t in self.stop_words:
-                # If you want to still index them but with no extra weight, just continue.
-                # If you don't want to index them at all, skip this token:
-                # continue
                 occurrence_weight = self.main_weight
             else:
-                # Determine the best possible weight addition
                 candidate_weights = []
                 if t in title_set:
                     candidate_weights.append(self.title_weight)
@@ -74,8 +68,6 @@ class Tokenizer:
                 if t in bold_set:
                     candidate_weights.append(self.bold_weight)
 
-                # If the token appears in special sets, choose the highest weight
-                # Otherwise, it just has the main_weight
                 if candidate_weights:
                     occurrence_weight = self.main_weight + max(candidate_weights)
                 else:
